@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>아스마 축제 - 학급 혼잡도</title>
+  <meta name="description" content="아스마 축제 부스별 실시간 혼잡도 안내">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/toss/tossface@latest/dist/tossface.css">
+  <style>body{font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR","Tossface",sans-serif}</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <header class="bg-indigo-600 text-white px-4 py-6 text-center">
+    <h1 class="text-2xl font-extrabold">🎪 아스마 축제</h1>
+    <p class="mt-1 opacity-90">부스별 실시간 혼잡도</p>
+  </header>
+
+  <main class="max-w-xl mx-auto p-4 space-y-5">
+    <section id="best" class="hidden rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
+      <div class="text-sm text-emerald-700 font-semibold">😊 지금 가장 한산한 부스</div>
+      <div id="bestList" class="mt-2 flex flex-wrap gap-2"></div>
+    </section>
+
+    <div id="legend" class="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600"></div>
+
+    <div id="grades" class="space-y-5"></div>
+
+    <p class="text-center text-xs text-slate-400 pt-2">
+      대기 중인 주문 수를 기준으로 실시간 갱신돼요. <span id="live" class="inline-block w-2 h-2 rounded-full bg-slate-300 align-middle"></span>
+    </p>
+  </main>
+
+  <script type="module">
+    // 이 페이지는 congestion 컬렉션(대기 건수)만 읽습니다. 매출 데이터에는 접근하지 않습니다.
+    import { congestionCol, onSnapshot, CLASSES, classId } from "/common.js";
+    import { CONGESTION } from "/firebase-config.js";
+    const $ = (s) => document.getElementById(s);
+    const level = (n) => CONGESTION.find((c) => n <= c.max);
+    const light = { "bg-yellow-400": "text-slate-900" };
+
+    $("legend").innerHTML = CONGESTION.map((c) =>
+      `<span class="flex items-center gap-1"><i class="inline-block w-3 h-3 rounded-full ${c.color}"></i>${c.label}</span>`).join("");
+
+    let pending = {};
+    function render() {
+      const cs = CLASSES.map((label) => ({ label, n: pending[classId(label)] || 0 }));
+      $("grades").innerHTML = [1, 2, 3].map((g) => `
+        <section>
+          <h2 class="font-bold text-lg mb-2">${g}학년</h2>
+          <div class="grid grid-cols-5 gap-2">
+            ${cs.filter((c) => c.label.startsWith(g + "-")).map((c) => {
+              const lv = level(c.n);
+              return `<div class="rounded-xl py-3 text-center text-white ${lv.color} ${light[lv.color] || ""}">
+                <div class="font-extrabold text-lg">${c.label.split("-")[1]}반</div>
+                <div class="text-xs font-semibold mt-0.5">${lv.label}</div>
+              </div>`;
+            }).join("")}
+          </div>
+        </section>`).join("");
+
+      const min = Math.min(...cs.map((c) => c.n));
+      const calm = cs.filter((c) => c.n === min && c.n <= CONGESTION[0].max);
+      $("best").classList.toggle("hidden", calm.length === 0 || calm.length === cs.length);
+      const MAX = 8;
+      const chip = "inline-flex items-center rounded-full px-3 py-1 text-sm font-bold";
+      $("bestList").innerHTML =
+        calm.slice(0, MAX).map((c) => `<span class="${chip} bg-emerald-500 text-white">${c.label.replace("-", "학년 ")}반</span>`).join("") +
+        (calm.length > MAX ? `<span class="${chip} bg-white text-emerald-700 border border-emerald-300">+${calm.length - MAX}개</span>` : "");
+    }
+
+    onSnapshot(congestionCol(), (snap) => {
+      pending = Object.fromEntries(snap.docs.map((d) => [d.id, d.data().pendingCount || 0]));
+      $("live").className = "inline-block w-2 h-2 rounded-full bg-emerald-500 align-middle";
+      render();
+    }, () => $("live").className = "inline-block w-2 h-2 rounded-full bg-red-500 align-middle");
+    render();
+  </script>
+</body>
+</html>

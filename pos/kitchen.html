@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>주방</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/toss/tossface@latest/dist/tossface.css">
+  <style>body{font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR","Tossface",sans-serif}</style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen">
+  <header class="bg-orange-500 px-4 py-3 flex justify-between items-center sticky top-0">
+    <h1 class="text-xl font-bold">🍳 <span id="title"></span> 주방</h1>
+    <div class="flex items-center gap-3">
+      <span class="text-lg">대기 <b id="count">0</b>건</span>
+      <button id="snd" class="bg-white/20 rounded-lg px-3 py-1">🔔 소리 켜기</button>
+    </div>
+  </header>
+  <main id="board" class="p-3 grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></main>
+  <p id="empty" class="text-center text-slate-400 text-xl mt-20">대기 중인 주문이 없어요 😌</p>
+  <script type="module">
+    import { getClass, classRefs, ensureClass, onSnapshot, query, where, completeOrder, cancelOrder, esc, beep, toast } from "/common.js";
+    const { id, label } = getClass();
+    const { ordersCol } = classRefs(id);
+    document.getElementById("title").textContent = label;
+    ensureClass(id, label);
+
+    let sound = false, seen = null, orders = [];
+    const $ = (s) => document.getElementById(s);
+    $("snd").onclick = () => { sound = !sound; $("snd").textContent = sound ? "🔔 소리 켜짐" : "🔕 소리 꺼짐"; if (sound) beep(); };
+
+    // status 단일 필드 조건 → 복합 인덱스 불필요. 정렬은 클라이언트에서.
+    onSnapshot(query(ordersCol, where("status", "==", "pending")), (snap) => {
+      orders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.createdAt - b.createdAt);
+      const ids = new Set(orders.map((o) => o.id));
+      if (seen && sound && [...ids].some((i) => !seen.has(i))) beep();
+      seen = ids;
+      render();
+    });
+
+    const ago = (t) => { const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? "방금" : `${m}분 전`; };
+    function render() {
+      $("count").textContent = orders.length;
+      $("empty").classList.toggle("hidden", orders.length > 0);
+      $("board").innerHTML = orders.map((o) => {
+        const late = Date.now() - o.createdAt > 10 * 60000;
+        return `
+        <article class="rounded-2xl p-4 ${late ? "bg-red-900 ring-2 ring-red-400" : "bg-slate-800"} flex flex-col">
+          <div class="flex justify-between items-baseline">
+            <span class="text-3xl font-extrabold text-orange-400">#${o.orderNo} <span class="text-lg text-white">${esc(o.buyer || "")}</span></span>
+            <span class="text-sm text-slate-400">${ago(o.createdAt)}</span>
+          </div>
+          <ul class="my-3 flex-1 space-y-1 text-xl">
+            ${o.items.map((i) => `<li class="flex justify-between"><span>${esc(i.name)}</span><b>× ${i.qty}</b></li>`).join("")}
+          </ul>
+          <div class="flex gap-2">
+            <button data-refund="${o.id}" class="px-4 py-3 rounded-xl bg-red-600 text-white text-lg active:scale-95">환불</button>
+            <button data-done="${o.id}" class="flex-1 py-3 rounded-xl bg-emerald-500 text-slate-900 text-xl font-bold active:scale-95">요리 완성</button>
+          </div>
+        </article>`;
+      }).join("");
+    }
+    setInterval(render, 30000); // "n분 전" 갱신
+
+    $("board").addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-done],[data-refund]"); if (!btn) return;
+      const refund = "refund" in btn.dataset;
+      if (refund && !confirm("이 주문을 환불(취소)하고 매출에서 뺄까요?")) return;
+      btn.disabled = true;
+      try { await (refund ? cancelOrder : completeOrder)(id, btn.dataset.done ?? btn.dataset.refund); if (refund) toast("환불 처리되었습니다."); }
+      catch { toast("⚠️ 처리 실패. 다시 눌러주세요."); btn.disabled = false; }
+    });
+  </script>
+</body>
+</html>

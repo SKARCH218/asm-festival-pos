@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>학교 총괄 대시보드</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/toss/tossface@latest/dist/tossface.css">
+  <style>body{font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR","Tossface",sans-serif}</style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <header class="bg-indigo-700 text-white px-4 py-4">
+    <h1 class="text-xl font-bold">🏫 학교 축제 총괄 대시보드</h1>
+    <div class="mt-2 flex gap-8">
+      <div><div class="text-xs opacity-80">전교 총 매출</div><div id="sum" class="text-4xl font-bold">0원</div></div>
+      <div><div class="text-xs opacity-80">총 주문 수</div><div id="cnt" class="text-4xl font-bold">0</div></div>
+    </div>
+  </header>
+  <main class="p-3 max-w-3xl mx-auto">
+    <h2 class="font-bold text-lg mb-2">🚦 학급별 혼잡도 <span class="text-sm font-normal text-slate-500">(조리 대기 주문 수 기준)</span></h2>
+    <div id="legend" class="flex flex-wrap gap-3 text-sm mb-2"></div>
+    <div id="busy" class="space-y-2 mb-6"></div>
+    <h2 class="font-bold text-lg mb-2">🏆 반별 매출 순위</h2>
+    <ol id="rank" class="space-y-2"></ol>
+  </main>
+  <script type="module">
+    import { db, collection, onSnapshot, requirePin, won, esc, CLASSES, classId, congestionCol } from "/common.js";
+    import { TEACHER_PIN, CONGESTION } from "/firebase-config.js";
+    requirePin(TEACHER_PIN);
+    const $ = (s) => document.getElementById(s);
+    const medal = ["🥇", "🥈", "🥉"];
+    const level = (n) => CONGESTION.find((c) => n <= c.max);
+
+    $("legend").innerHTML = CONGESTION.map((c, i) => {
+      const lo = i ? CONGESTION[i - 1].max + 1 : 0;
+      const range = c.max === Infinity ? `${lo}건~` : `${lo}~${c.max}건`;
+      return `<span class="flex items-center gap-1"><i class="inline-block w-3 h-3 rounded-full ${c.color}"></i>${c.label} <span class="text-slate-500">${range}</span></span>`;
+    }).join("");
+
+    // 반 문서에 매출·대기 건수가 집계되어 있으므로 classes 컬렉션만 구독하면 됨 (읽기 비용 최소)
+    let data = {}, cong = {};
+    onSnapshot(collection(db, "classes"), (snap) => {
+      data = Object.fromEntries(snap.docs.map((d) => [d.id, d.data()]));
+      render();
+    });
+    onSnapshot(congestionCol(), (snap) => {
+      cong = Object.fromEntries(snap.docs.map((d) => [d.id, d.data()]));
+      render();
+    });
+
+    function render() {
+      // 학급은 하드코딩(CLASSES) — 아직 한 번도 열리지 않은 반도 0으로 표시
+      const cs = CLASSES.map((label) => {
+        const d = data[classId(label)] || {};
+        return { label, sales: d.totalSales || 0, cnt: d.orderCount || 0, pending: cong[classId(label)]?.pendingCount || 0 };
+      });
+      $("sum").textContent = won(cs.reduce((s, c) => s + c.sales, 0));
+      $("cnt").textContent = cs.reduce((s, c) => s + c.cnt, 0).toLocaleString("ko-KR");
+
+      $("busy").innerHTML = [1, 2, 3].map((g) => `
+        <div class="grid grid-cols-5 gap-2">
+          ${cs.filter((c) => c.label.startsWith(g + "-")).map((c) => {
+            const lv = level(c.pending);
+            return `<div class="rounded-xl p-2 text-center text-white ${lv.color} ${lv.color === "bg-yellow-400" ? "!text-slate-900" : ""}">
+              <div class="font-bold">${esc(c.label)}</div>
+              <div class="text-2xl font-extrabold leading-tight">${c.pending}</div>
+              <div class="text-xs">${lv.label}</div>
+            </div>`;
+          }).join("")}
+        </div>`).join("");
+
+      const ranked = [...cs].sort((a, b) => b.sales - a.sales);
+      const max = ranked[0].sales || 1;
+      $("rank").innerHTML = ranked.map((c, i) => `
+        <li class="bg-white rounded-xl p-3 shadow">
+          <div class="flex justify-between items-baseline">
+            <span class="text-lg font-bold">${c.sales ? medal[i] || "" : ""} ${i + 1}위 · ${esc(c.label)}</span>
+            <span class="text-xl font-bold">${won(c.sales)}</span>
+          </div>
+          <div class="h-2 mt-2 bg-slate-200 rounded"><div class="h-2 bg-indigo-500 rounded" style="width:${(c.sales / max) * 100}%"></div></div>
+          <div class="text-xs text-slate-500 mt-1">주문 ${c.cnt}건 · 조리 대기 ${c.pending}건</div>
+        </li>`).join("");
+    }
+    render();
+  </script>
+</body>
+</html>

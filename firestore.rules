@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 로그인 없이 쓰는 축제용 규칙: 아래 두 컬렉션만 허용하고 나머지는 모두 차단.
+    // 축제가 끝나면 콘솔에서 `allow read, write: if false;`로 바꿔 잠그세요.
+
+    // 소비자용 혼잡도 페이지(/)가 읽는 공개 컬렉션. 매출 정보 없이 대기 건수만 저장.
+    match /congestion/{classId} {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasOnly(['pendingCount', 'updatedAt'])
+                   && request.resource.data.pendingCount is int;
+    }
+
+    match /classes/{classId} {
+      allow read, write: if true;
+      match /{sub=**} {
+        allow read, write: if true;
+      }
+    }
+  }
+}

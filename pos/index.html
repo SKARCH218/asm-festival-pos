@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>축제 포스 - 운영진 입구</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/toss/tossface@latest/dist/tossface.css">
+  <style>body{font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR","Tossface",sans-serif}</style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow p-6 w-full max-w-md space-y-5">
+    <h1 class="text-2xl font-bold">🏫 축제 포스 & 주방</h1>
+    <div class="grid grid-cols-2 gap-3">
+      <label class="block">
+        <span class="text-sm text-slate-500">학년</span>
+        <select id="grade" class="mt-1 w-full border rounded-lg px-3 py-3 text-xl bg-white">
+          <option value="">선택</option>
+          <option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option>
+        </select>
+      </label>
+      <label class="block">
+        <span class="text-sm text-slate-500">반</span>
+        <select id="num" class="mt-1 w-full border rounded-lg px-3 py-3 text-xl bg-white">
+          <option value="">선택</option>
+          <option value="1">1반</option><option value="2">2반</option><option value="3">3반</option><option value="4">4반</option><option value="5">5반</option>
+        </select>
+      </label>
+    </div>
+    <div id="links" class="grid gap-2">
+      <a data-p="pos" class="block text-center bg-blue-600 text-white rounded-lg py-3 text-lg">🧾 주문 접수 (포스)</a>
+      <a data-p="kitchen" class="block text-center bg-orange-500 text-white rounded-lg py-3 text-lg">🍳 주방 화면</a>
+    </div>
+    <a href="/pos/teacher" class="block text-center text-slate-500 underline">선생님 총괄 대시보드</a>
+  </div>
+  <script>
+    const grade = document.getElementById("grade"), num = document.getElementById("num");
+    const update = () => document.querySelectorAll("#links a").forEach((a) => {
+      const v = grade.value && num.value ? `${grade.value}-${num.value}` : "";
+      a.href = v ? `/pos/${a.dataset.p === "pos" ? "order" : a.dataset.p}?class=${encodeURIComponent(v)}` : "#";
+      a.style.opacity = v ? 1 : 0.4;
+    });
+    grade.addEventListener("change", update); num.addEventListener("change", update); update();
+  </script>
+</body>
+</html>
